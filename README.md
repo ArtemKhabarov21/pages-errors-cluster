@@ -2,10 +2,10 @@
 
 > *In the name of the Omnissiah, who is the Machine-God, and through the sacred
 > rites of the Binary Cant, we invoke the Litany of Sorting. Let the errors of
-> the Pages-schemas be gathered, classified and bound into Reports, that the
+> the schema errors be gathered, classified and bound into Reports, that the
 > Tech-Priests may know where the Machine-Spirit suffers.*
 
-Скрипт собирает все ошибки модуля Pages-схем с эндпоинта менеджера,
+Скрипт собирает все ошибки модуля схем с эндпоинта менеджера,
 группирует однородные из них в **кластеры** и выносит **отчёт** рядом с собой.
 Зависимостей нет, нужен только Python 3.
 
@@ -16,7 +16,7 @@
 1. **Призовите сервитора-пользователя.** В карточке служебного пользователя
    менеджера выдайте API-токен кнопкой «сгенерировать». Токен показывается
    единожды, как священный ключ. Пользователь должен обладать правом
-   «Ошибки» модуля Pages-схем и иметь включённый API-доступ.
+   «Ошибки» модуля схем и иметь включённый API-доступ.
 2. **Освятите конфигурацию.** Скопируйте `.env.example` в `.env` и вставьте
    адрес Машинного Духа менеджера и токен:
 
@@ -39,7 +39,7 @@ python3 cluster_errors.py --file x.json  # офлайн: читать дар Д�
 Для расписания по канону cron, вместо вечного цикла:
 
 ```
-*/30 * * * * cd /путь/к/pages-errors-cluster && python3 cluster_errors.py --once >> reports/cron.log 2>&1
+*/30 * * * * cd /путь/к/cluster-errors && python3 cluster_errors.py --once >> reports/cron.log 2>&1
 ```
 
 ## III. Дары, которые вы получите

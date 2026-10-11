@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Сбор и кластеризация ошибок Pages-схем.
+"""Сбор и кластеризация ошибок модуля схем.
 
 Тянет все ошибки с эндпоинта менеджера, группирует похожие (одинаковый текст
 с подставленными id, доменами, числами и т.п.) и пишет отчёты рядом со скриптом:
@@ -33,7 +33,7 @@ HERE = Path(__file__).resolve().parent
 REPORTS = HERE / "reports"
 STATE = HERE / "state.json"
 ENV_FILE = HERE / ".env"
-URL_PLACEHOLDER = "https://YOUR-MANAGER-HOST/api/v1/pages-schemas/errors"
+URL_PLACEHOLDER = "https://YOUR-MANAGER-HOST/api/v1/YOUR-ERRORS-ENDPOINT"
 INTERVAL_SECONDS = 30 * 60
 KEEP_REPORTS = 400  # датированных отчётов храним столько, остальные удаляем
 
@@ -158,7 +158,7 @@ def render_markdown(stamp: str, errors: list[dict], clusters: list[dict], new_ke
     open_total = sum(1 for e in errors if not e.get("resolved_at"))
     level_counts = Counter(e.get("level") for e in errors if not e.get("resolved_at"))
     lines = [
-        f"# Отчёт по ошибкам Pages-схем, {stamp}",
+        f"# Отчёт по ошибкам модуля схем, {stamp}",
         "",
         f"- Записей всего: **{len(errors)}**, открытых: **{open_total}** "
         f"(ошибок {level_counts.get('error', 0)}, предупреждений {level_counts.get('warning', 0)})",
@@ -175,7 +175,7 @@ def render_markdown(stamp: str, errors: list[dict], clusters: list[dict], new_ke
         lines.append(f"| {i} | {c['level']} | {c['source_label'] or c['source']} | {c['open']} | {c['occurrences']} | {c['last_24h']} | {c['domains_total']} | {text}{mark} |")
 
     texts = {c["template"] for c in clusters}
-    if "выкладка домена не удалась" in texts and "задача упала: deploypagesdomainjob" in texts:
+    if "выкладка домена не удалась" in texts and any(t.startswith("задача упала") and "domainjob" in t for t in texts):
         lines += ["", "> Одна неудачная выкладка даёт две записи: «выкладка домена не удалась» (предупреждение) "
                   "и «задача упала» (ошибка). Поэтому их счётчики совпадают, это одно и то же событие."]
 
@@ -215,12 +215,12 @@ def run_once(args: argparse.Namespace) -> None:
     if args.file:
         payload = json.loads(Path(args.file).read_text(encoding="utf-8"))
     else:
-        token = os.environ.get("PAGES_ERRORS_TOKEN", "")
-        url = os.environ.get("PAGES_ERRORS_URL", "")
+        token = os.environ.get("ERRORS_API_TOKEN", "")
+        url = os.environ.get("ERRORS_API_URL", "")
         if not token:
-            raise SystemExit("Нет токена: задайте PAGES_ERRORS_TOKEN в .env (см. .env.example)")
+            raise SystemExit("Нет токена: задайте ERRORS_API_TOKEN в .env (см. .env.example)")
         if not url or url == URL_PLACEHOLDER:
-            raise SystemExit("Нет адреса менеджера: задайте PAGES_ERRORS_URL в .env (см. .env.example)")
+            raise SystemExit("Нет адреса менеджера: задайте ERRORS_API_URL в .env (см. .env.example)")
         payload = fetch(url, token, args.timeout)
 
     errors = payload.get("items", [])
