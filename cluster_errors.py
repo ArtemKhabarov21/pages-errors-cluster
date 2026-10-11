@@ -59,12 +59,12 @@ def normalize(text: str, limit: int) -> str:
 
 
 def cluster_key(error: dict) -> str:
-    detail = error.get("detail") or ""
+    """Группа — по тексту сообщения. Детали у каждого домена свои, поэтому
+    в ключ их не берём: они показываются внутри кластера вариантами."""
     raw = "|".join([
         str(error.get("source") or ""),
         str(error.get("level") or ""),
         normalize(error.get("message") or "", 300),
-        normalize(detail, 200),
     ])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
@@ -88,14 +88,20 @@ def build_clusters(errors: list[dict], now: dt.datetime) -> list[dict]:
     for key, items in groups.items():
         first = min((parse_ts(e.get("first_seen_at")) for e in items if e.get("first_seen_at")), default=None)
         last = max((parse_ts(e.get("last_seen_at")) for e in items if e.get("last_seen_at")), default=None)
-        samples = []
-        for e in sorted(items, key=lambda e: e.get("occurrences") or 0, reverse=True)[:3]:
-            samples.append({
-                "message": e.get("message"),
-                "detail": (e.get("detail") or "")[:300],
-                "domain": e.get("domain"),
-                "schema": (e.get("schema") or {}).get("name"),
-            })
+        # Варианты деталей: сколько разных текстов ошибки за этой группой и по одному примеру каждого.
+        variants: dict[str, dict] = {}
+        for e in sorted(items, key=lambda e: e.get("occurrences") or 0, reverse=True):
+            variant_key = normalize(e.get("detail") or "", 200)
+            if variant_key not in variants:
+                variants[variant_key] = {
+                    "message": e.get("message"),
+                    "detail": (e.get("detail") or "")[:300],
+                    "domain": e.get("domain"),
+                    "schema": (e.get("schema") or {}).get("name"),
+                    "count": 0,
+                }
+            variants[variant_key]["count"] += int(e.get("occurrences") or 0)
+        samples = sorted(variants.values(), key=lambda v: v["count"], reverse=True)[:3]
         clusters.append({
             "key": key,
             "level": Counter(e.get("level") for e in items).most_common(1)[0][0],
@@ -112,6 +118,7 @@ def build_clusters(errors: list[dict], now: dt.datetime) -> list[dict]:
             "schemas": sorted({(e.get("schema") or {}).get("name") for e in items if e.get("schema")}),
             "first_seen": first.isoformat() if first else None,
             "last_seen": last.isoformat() if last else None,
+            "detail_variants": len(variants),
             "samples": samples,
         })
     clusters.sort(key=lambda c: (c["open"], c["occurrences"]), reverse=True)
@@ -167,6 +174,11 @@ def render_markdown(stamp: str, errors: list[dict], clusters: list[dict], new_ke
         text = c["template"].replace("|", "\\|")[:120]
         lines.append(f"| {i} | {c['level']} | {c['source_label'] or c['source']} | {c['open']} | {c['occurrences']} | {c['last_24h']} | {c['domains_total']} | {text}{mark} |")
 
+    texts = {c["template"] for c in clusters}
+    if "выкладка домена не удалась" in texts and "задача упала: deploypagesdomainjob" in texts:
+        lines += ["", "> Одна неудачная выкладка даёт две записи: «выкладка домена не удалась» (предупреждение) "
+                  "и «задача упала» (ошибка). Поэтому их счётчики совпадают, это одно и то же событие."]
+
     if new_keys:
         lines += ["", "## Новые кластеры с прошлого отчёта", ""]
         for c in clusters:
@@ -183,9 +195,10 @@ def render_markdown(stamp: str, errors: list[dict], clusters: list[dict], new_ke
             f"- Схемы: {', '.join(c['schemas']) or '—'}",
             f"- Домены ({c['domains_total']}): {', '.join(c['domains']) or '—'}",
             f"- Первый раз: {c['first_seen'] or '—'}, последний: {c['last_seen'] or '—'}",
+            f"- Вариантов деталей: {c['detail_variants']}",
         ]
         for s in c["samples"]:
-            lines.append(f"  - пример: `{(s['message'] or '')[:200]}`" + (f", деталь: `{s['detail'][:200]}`" if s["detail"] else ""))
+            lines.append(f"  - {s['count']} раз: `{(s['message'] or '')[:200]}`" + (f", деталь: `{s['detail'][:200]}`" if s["detail"] else ""))
         lines.append("")
     return "\n".join(lines)
 
